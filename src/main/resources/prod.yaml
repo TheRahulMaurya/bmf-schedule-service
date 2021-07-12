@@ -1,0 +1,13 @@
+http:
+  port: "8083"
+
+db:
+  user: "nkjYljGzei"
+  database: "nkjYljGzei"
+  password: "ZujDAillkK"
+  host: "remotemysql.com"
+  port: "3306"
+  
+  
+  
+  

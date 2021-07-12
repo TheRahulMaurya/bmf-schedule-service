@@ -1,0 +1,13 @@
+http:
+  port: "8083"
+
+db:
+  user: "root"
+  database: "book_my_flights"
+  password: "password"
+  host: "localhost"
+  port: "3306"
+  
+  
+  
+  

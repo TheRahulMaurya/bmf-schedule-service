@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="getScheduleByID" doc:id="d6c3ffaa-c80b-4cbf-8e63-19d4b58b4e22" >
+		<set-variable value="#[message.attributes.uriParams.scheduleID]" doc:name="scheduleID" doc:id="30b9a2a5-ddb5-430f-b8dc-e6d93fed3b6f" variableName="scheduleID" />
+		<logger level="INFO" doc:name="Logger" doc:id="7e157f31-1242-4fb3-9a16-fd7fdc4c4a88" message="Getting schedule by ID = #[vars.scheduleID]" />
+		<flow-ref doc:name="getScheduleByIDSubFlow" doc:id="64a388af-fe2b-459c-a049-bdee9abfb929" name="getScheduleByIDSubFlow"/>
+		<logger level="INFO" doc:name="Logger" doc:id="74cccc8d-4835-4f5d-85fc-ab71ca8f1bcb" message="Finished"/>
+	</flow>
+	<sub-flow name="getScheduleByIDSubFlow" doc:id="48f03efd-4729-4820-a81e-98e055733909">
+		<db:select doc:name="getScheduleByID" doc:id="68c52ad1-df33-4035-a309-29c5a4783c37" config-ref="Database_Config">
+			<db:sql><![CDATA[select * from schedule where schedule_id = :scheduleID and is_active = 1;]]></db:sql>
+				<db:input-parameters><![CDATA[#[{
+	'scheduleID': vars.scheduleID
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Is empty" doc:id="065dca62-86c8-42d6-b2f2-8f45cef46d97">
+			<when expression="#[payload[0] != null]">
+				<ee:transform doc:name="Transform Message" doc:id="de0511fc-3d17-4773-9924-73ac137c69e9">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    "updatedOn": (payload[0].updated_on as DateTime >> "IST") as String {format:"eeee,MMMM dd,yyyy HH:mm:ss"},
+    "arrivalTime": (payload[0].arrival_time as DateTime >> "IST") as String {format:"eeee,MMMM dd,yyyy HH:mm:ss"},
+    "toLocation": lookup("getLocationByID",{'locationID':payload[0].to_location}),
+    "createdOn": (payload[0].created_on as DateTime >> "IST") as String {format:"eeee,MMMM dd,yyyy HH:mm:ss"},
+    "fromLocation": lookup("getLocationByID",{'locationID':payload[0].from_location}),
+    "scheduleId": 2,
+    "departureTime": (payload[0].departure_time as DateTime >> "IST") as String {format:"eeee,MMMM dd,yyyy HH:mm:ss"},
+    "duration": (payload[0].arrival_time - payload[0].departure_time) as DateTime as String{format : "hh:mm:ss"},
+    "flightId": 1
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+			</when>
+			<otherwise>
+				<ee:transform doc:name="Transform Message" doc:id="6e4e4ef1-d9c2-41da-bf53-aa1cc5dd4c6b">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "There is no schedule having id = " ++ (vars.scheduleID default 0)
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+	</sub-flow>
+	<flow name="deleteScheduleByID" doc:id="e6b72322-e87f-4ca8-b158-6c412a1200fc" >
+		<set-variable value="#[message.attributes.uriParams.scheduleID]" doc:name="scheduleID" doc:id="50bfed63-1b86-48b2-b2ce-a8f86e9435ef" variableName="scheduleID"/>
+		<logger level="INFO" doc:name="Logger" doc:id="3dbd4c6d-960e-415c-9cd6-acb475023911" message="Deleting schedule by ID = #[vars.scheduleID]"/>
+		<db:update doc:name="deleteScheduleByID" doc:id="acb57162-a5c1-4f11-837f-8a9a245fd016" config-ref="Database_Config">
+			<db:sql ><![CDATA[update schedule set is_active = 0 where schedule_id = :scheduleID]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	'scheduleID': vars.scheduleID
+}]]]></db:input-parameters>
+		</db:update>
+		<ee:transform doc:name="Transform Message" doc:id="be5aca77-5579-45a1-a432-14dff96b1e75" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Schedule is removed having id: " ++ (vars.scheduleID default 0)
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="706b9ef3-1c09-47da-b7ea-71e745f9f4d2" message="Deleted"/>
+	</flow>
+	<flow name="addSchedule" doc:id="3892212e-949b-40ad-b5cc-57e0cedbf9bf" >
+		<logger level="INFO" doc:name="Logger" doc:id="54a5ea68-bf79-40de-a930-ffa726a851c1" />
+		<db:insert doc:name="addSchedule" doc:id="04ac0c7f-6edd-403c-a5e0-a170ed7f9ee4" config-ref="Database_Config" autoGenerateKeys="true">
+			<db:sql ><![CDATA[INSERT INTO schedule
+(
+`flight_id`,
+`from_location`, 
+`to_location`, 
+`departure_time`, 
+`arrival_time`, 
+`is_active`, 
+`updated_on`, 
+`created_on`, 
+`modified_by`, 
+`created_by`
+) 
+VALUES 
+(
+:flight_id,
+:from_location, 
+:to_location, 
+:departure_time, 
+:arrival_time, 
+:is_active, 
+:updated_on, 
+:created_on, 
+:modified_by, 
+:created_by
+);]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	'flight_id': message.payload.flightId,
+	'from_location': message.payload.fromLocation, 
+	'to_location': message.payload.toLocation, 
+	'departure_time': message.payload.departureTime, 
+	'arrival_time':message.payload.arrivalTime, 
+	'is_active': 1, 
+	'updated_on': now() as Number, 
+	'created_on': now() as Number, 
+	'modified_by': message.payload.userId, 
+	'created_by': message.payload.userId
+}]]]></db:input-parameters>
+		</db:insert>
+		<set-variable value="#[payload.generatedKeys.GENERATED_KEY]" doc:name="scheduleID" doc:id="9e9a0694-62d9-4670-a8d3-c2bf8f2bc292" variableName="scheduleID"/>
+		<flow-ref doc:name="getScheduleByIDSubFlow" doc:id="cedf4005-03af-489a-9ee1-aa6167e5ce80" name="getScheduleByIDSubFlow"/>
+		<logger level="INFO" doc:name="Logger" doc:id="f8e335ba-f3bb-4c66-90a4-9f5e2faeb6e1" message="Finished"/>
+	</flow>
+	<sub-flow name="isScheduleExistSubFlow" doc:id="cbef95a7-a20f-4a86-a565-63451d6aa6bf">
+		<db:select doc:name="getScheduleCount" doc:id="c265ca8e-e30c-43b9-aa70-ffb557b3de16" config-ref="Database_Config">
+			<db:sql><![CDATA[select count(schedule_id) as count from schedule where schedule_id = :scheduleID and is_active = 1]]></db:sql>
+			<db:input-parameters><![CDATA[#[{
+	'scheduleID': vars.scheduleID
+}]]]></db:input-parameters>
+		</db:select>
+		<set-variable value="#[message.payload[0].count]" doc:name="count" doc:id="e7861579-ef34-4c6c-bc09-d20c82539cd2" variableName="count"/>
+	</sub-flow>
+	<flow name="getLocationByID" doc:id="345fc9da-90ab-4e40-90b9-88c12baf03aa" >
+		<db:select doc:name="getLocationByID" doc:id="02d261ae-2d9d-43b4-b210-88126430e602" config-ref="Database_Config">
+			<db:sql ><![CDATA[select * from location where location_id = :locationID]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	'locationID': payload.locationID
+}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="823151cd-0ca6-466c-8296-5964c98d84f7" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"locationId": payload[0].location_id,
+	"name": payload[0].location_name,
+	"shortName": payload[0].location_short_name
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="updateSchedule" doc:id="45f53e5b-bf75-4eff-851c-59e2586410dc" >
+		<logger level="INFO" doc:name="Logger" doc:id="9c07725f-8661-42ee-af70-a2edb0e4a1fe" message="Updating schedule ..."/>
+		<set-variable value="#[message.payload]" doc:name="payload" doc:id="85c3bccb-d9bf-4a17-b8a0-65ef431bbe2e" variableName="payload" mimeType="application/json"/>
+		<set-variable value="#[message.attributes.uriParams.scheduleID]" doc:name="scheduleID" doc:id="4ef06c82-fcc2-424c-898a-f72bfeae8ce5" variableName="scheduleID"/>
+		<flow-ref doc:name="isScheduleExistSubFlow" doc:id="22ad558c-93ea-4ce0-9256-6ed55bf63daa" name="isScheduleExistSubFlow" />
+		<choice doc:name="is Schedule Exist" doc:id="ebbacf02-f8fb-498e-aeea-bebdc1c57bb7" >
+			<when expression="#[vars.count != 0]">
+				<db:update doc:name="UpdateSchedule" doc:id="f64dd8df-e3a5-40a0-8a6c-5ae7330d749e" config-ref="Database_Config">
+					<db:sql><![CDATA[update schedule set
+flight_id = :flightID,
+from_location = :fromLocation,
+to_location = :toLocation,
+departure_time = :departureTime,
+arrival_time = :arrivalTime,
+updated_on = :updatedOn,
+modified_by = :modifiedBy 
+where schedule_id = :scheduleID;]]></db:sql>
+					<db:input-parameters><![CDATA[#[{
+	'flightID': vars.payload.flightId,
+	'fromLocation': vars.payload.fromLocation,
+	'toLocation': vars.payload.toLocation,
+	'departureTime': vars.payload.departureTime,
+	'arrivalTime': vars.payload.arrivalTime,
+	'updatedOn': now() as Number,
+	'modifiedBy': vars.payload.userId,
+	'scheduleID': vars.scheduleID
+}]]]></db:input-parameters>
+				</db:update>
+				<flow-ref doc:name="getScheduleByIDSubFlow" doc:id="53c27efd-574e-476c-ab9d-8a1cf544df9f" name="getScheduleByIDSubFlow" />
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="dfac7d44-19ea-456c-9442-712b46db5dfb" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Schedule not found."
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+		<logger level="INFO" doc:name="Logger" doc:id="ec1287e9-901a-4a84-b231-029bf76c2313" message="Finished"/>
+	</flow>
+</mule>
